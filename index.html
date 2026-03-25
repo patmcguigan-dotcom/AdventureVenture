@@ -3,30 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Amber Dungeons v9.8 - The Quest</title>
+    <title>Amber Dungeons v9.9</title>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
-        :root { --amber: #ffb000; --amber-dim: #553a00; --bg: #050300; --red: #ff3300; }
+        :root { --amber: #ffb000; --amber-dim: #553a00; --bg: #050300; --white: #ffffff; }
         body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'VT323', monospace; color: var(--amber); touch-action: none; text-transform: uppercase; }
         
-        /* UI OVERLAYS */
-        #dialogue-box, #encounter-overlay {
+        .overlay {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 80%; max-width: 500px; background: var(--bg); border: 4px double var(--amber);
+            width: 85%; max-width: 500px; background: var(--bg); border: 4px double var(--amber);
             padding: 20px; z-index: 300; display: none; flex-direction: column; align-items: center; text-align: center;
         }
 
         .btn {
             background: var(--bg); border: 2px solid var(--amber); color: var(--amber);
-            padding: 10px 20px; cursor: pointer; font-family: 'VT323'; font-size: 1.2rem; margin-top: 15px;
+            padding: 12px 20px; cursor: pointer; font-family: 'VT323'; font-size: 1.3rem; margin: 10px;
         }
         .btn:active { background: var(--amber); color: var(--bg); }
 
         #status-bar {
             position: fixed; top: 0; width: 100%; height: 50px;
             background: var(--amber); color: var(--bg);
-            display: flex; justify-content: space-around; align-items: center;
-            font-size: 1rem; font-weight: bold; z-index: 20;
+            display: flex; justify-content: space-around; align-items: center; font-weight: bold; z-index: 20;
         }
         #text-buffer {
             position: fixed; bottom: 10px; left: 10px; right: 10px; height: 60px;
@@ -40,20 +38,27 @@
 
     <div id="status-bar">
         <div>HERO: ALISTAIR<br>HP: [<span id="hp-bar">||||||||||||||||||||</span>]</div>
-        <div>ATK MOD: +<span id="atk-mod">4</span><br>WEAPON: <span id="weap-name">NONE</span></div>
-        <div>GOBLINS: <span id="gob-count">5</span></div>
+        <div>WEAPON: <span id="weap-name">NONE</span></div>
     </div>
 
-    <div id="dialogue-box">
+    <div id="dialogue-box" class="overlay">
         <h3 id="diag-title">MESSAGE</h3>
         <p id="diag-text">...</p>
-        <button class="btn" onclick="closeDialogue()">[X] CLOSE</button>
+        <div id="diag-options" style="display:flex;">
+            <button class="btn" onclick="closeDialogue()">[X] CLOSE</button>
+        </div>
     </div>
 
-    <div id="encounter-overlay">
+    <div id="victory-screen" class="overlay">
+        <h1 style="color:var(--white)">VICTORY ATTAINED</h1>
+        <p>THE GOBLIN KING HAS FALLEN. THE WAY IS OPEN.</p>
+        <button class="btn" onclick="closeVictory()">[ENTER NEXT LEVEL]</button>
+    </div>
+
+    <div id="encounter-overlay" class="overlay">
         <h2 id="foe-name">FOE</h2>
         <div id="combat-log">> AWAITING ACTION...</div>
-        <div style="display:flex; gap:10px;">
+        <div style="display:flex;">
             <button class="btn" onclick="resolveCombat('ATTACK')">[A]TTACK</button>
             <button class="btn" onclick="resolveCombat('DODGE')">[D]ODGE</button>
         </div>
@@ -61,7 +66,7 @@
 
     <div class="scanlines"></div>
     <div id="game-container"></div>
-    <div id="text-buffer"><div id="log-content">> MISSION START...</div></div>
+    <div id="text-buffer"><div id="log-content">> BOOTING...</div></div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -70,11 +75,10 @@
         import * as THREE from 'three';
 
         // --- GAME STATE ---
-        let hp = 20, str = 4, weaponBonus = 0, level = 1, gameState = 'RUNNING';
-        let hasSword = false, currentEnemy = null;
+        let hp = 20, str = 4, weaponBonus = 0, gameState = 'RUNNING';
+        let metGuard = false, currentEnemy = null, victoryDoor = null;
         const AMBER = 0xffb000;
 
-        // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.OrthographicCamera(-8, 8, 4.5, -4.5, 0.1, 1000); camera.position.z = 10;
         const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -82,15 +86,13 @@
         document.getElementById('game-container').appendChild(renderer.domElement);
         const worldGroup = new THREE.Group(); const targetWorldPos = new THREE.Vector3(0, 0, 0); scene.add(worldGroup);
 
-        // --- MAP & WALLS ---
-        const grid = new THREE.GridHelper(40, 40, 0x332200, 0x110800); grid.rotation.x = Math.PI / 2; worldGroup.add(grid);
+        // --- MAP ELEMENTS ---
+        const grid = new THREE.GridHelper(40, 40, 0x221100, 0x110800); grid.rotation.x = Math.PI / 2; worldGroup.add(grid);
         function addWall(x, y) {
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.5), new THREE.MeshBasicMaterial({ color: AMBER, wireframe: true }));
-            mesh.position.set(x, y, 0); worldGroup.add(mesh);
+            const m = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.95, 0.5), new THREE.MeshBasicMaterial({ color: AMBER, wireframe: true }));
+            m.position.set(x, y, 0); worldGroup.add(m);
         }
-        // Build a small "Throne Room" for the boss
-        for(let i=3; i<=7; i++) { addWall(i, 4); addWall(i, 6); }
-        addWall(3, 5);
+        for(let i=3; i<=7; i++) { addWall(i, 4); addWall(i, 8); } // Boss room boundaries
 
         // --- ENTITIES ---
         const entities = [];
@@ -98,98 +100,127 @@
             let geo = (type === 'BOSS') ? new THREE.TorusKnotGeometry(0.4, 0.1) : new THREE.IcosahedronGeometry(0.4, 0);
             if(type === 'NPC') geo = new THREE.CylinderGeometry(0, 0.3, 0.6, 4);
             if(type === 'SWORD') geo = new THREE.BoxGeometry(0.1, 0.6, 0.1);
+            if(type === 'DOOR') geo = new THREE.PlaneGeometry(0.8, 1.2);
 
             const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: type === 'NPC' ? 0x00ffff : AMBER, wireframe: true }));
             mesh.position.set(x, y, 0);
             mesh.userData = { type, name, ac, health, active: true };
+            if(type === 'DOOR') { mesh.visible = false; victoryDoor = mesh; }
             worldGroup.add(mesh); entities.push(mesh);
         }
 
-        spawn(1, 0, 'NPC', 'INJURED_GUARD', 0, 0);   // Friendly NPC
-        spawn(-2, -1, 'SWORD', 'IRON_CLAYMORE', 0, 0); // The Powerup
-        spawn(2, 2, 'ENEMY', 'GOBLIN_SCOUT', 10, 5);
-        spawn(4, -2, 'ENEMY', 'GOBLIN_THUG', 12, 8);
-        spawn(5, 5, 'BOSS', 'GOBLIN_KING', 18, 20); // The Big Boss
+        spawn(1, 0, 'NPC', 'GUARD', 0, 0);
+        spawn(-3, 0, 'SWORD', 'CLAYMORE', 0, 0);
+        spawn(5, 6, 'BOSS', 'GOBLIN_KING', 18, 20);
+        spawn(5, 7.5, 'DOOR', 'LEVEL_EXIT', 0, 0);
 
-        // --- UI & DIALOGUE ---
-        window.openDialogue = (title, text) => {
-            gameState = 'DIALOGUE';
-            document.getElementById('diag-title').innerText = title;
-            document.getElementById('diag-text').innerText = text;
-            document.getElementById('dialogue-box').style.display = 'flex';
-        };
+        // --- INTERACTION LOGIC ---
         window.closeDialogue = () => {
             gameState = 'RUNNING';
             document.getElementById('dialogue-box').style.display = 'none';
         };
 
-        // --- COMBAT SYSTEM ---
-        window.resolveCombat = (action) => {
-            const roll = Math.floor(Math.random() * 20) + 1;
-            const totalAtk = roll + str + weaponBonus;
-            const log = document.getElementById('combat-log');
-
-            if (action === 'ATTACK') {
-                if (totalAtk >= currentEnemy.userData.ac) {
-                    currentEnemy.userData.health -= (5 + weaponBonus);
-                    log.innerText = `HIT! ROLL ${totalAtk} vs AC ${currentEnemy.userData.ac}.`;
-                    if(currentEnemy.userData.health <= 0) victory();
-                } else {
-                    hp -= 2; log.innerText = `MISS! ROLL ${totalAtk} vs AC ${currentEnemy.userData.ac}. FOE STRIKES!`;
-                }
-            } else { // Dodge
-                if (roll + 2 >= 12) log.innerText = `EVADED! ROLL ${roll+2}.`;
-                else { hp -= 1; log.innerText = `NICKED! ROLL ${roll+2}.`; }
-            }
+        window.restHero = () => {
+            const heal = Math.floor(Math.random() * 8) + 3;
+            hp = Math.min(20, hp + heal);
+            updateLog(`RESTED. RECOVERED ${heal} HP.`);
             updateUI();
-            if (hp <= 0) location.reload();
+            closeDialogue();
         };
 
-        function victory() {
-            currentEnemy.visible = false; currentEnemy.userData.active = false;
-            document.getElementById('encounter-overlay').style.display = 'none';
-            gameState = 'RUNNING';
-            updateLog(`${currentEnemy.userData.name} DEFEATED.`);
-            document.getElementById('gob-count').innerText = entities.filter(e => e.userData.active && (e.userData.type === 'ENEMY' || e.userData.type === 'BOSS')).length;
-        }
-
-        // --- INTERACTION ---
-        function move(dx, dy) {
-            if (gameState !== 'RUNNING') return;
-            targetWorldPos.x -= dx; targetWorldPos.y -= dy;
-            const px = -targetWorldPos.x, py = -targetWorldPos.y;
-
+        function checkInteractions(px, py) {
             entities.forEach(e => {
-                if (e.userData.active && e.position.distanceTo(new THREE.Vector3(px, py, 0)) < 0.1) {
-                    if (e.userData.type === 'NPC') openDialogue(e.userData.name, "THE GOBLINS... THEY HAVE TAKEN THE LOWER HALLS. YOU MUST REMOVE THE INFESTATION. SEEK THE IRON CLAYMORE TO THE WEST IF YOU HOPE TO CHALLENGE THEIR KING.");
-                    else if (e.userData.type === 'SWORD') {
-                        e.userData.active = false; e.visible = false; hasSword = true; weaponBonus = 5;
-                        updateLog("PICKED UP IRON CLAYMORE. ATK MOD INCREASED.");
-                        updateUI();
-                    } else { // ENEMY or BOSS
-                        currentEnemy = e;
-                        document.getElementById('foe-name').innerText = e.userData.name;
-                        document.getElementById('encounter-overlay').style.display = 'flex';
-                        gameState = 'ENCOUNTER';
+                if (!e.userData.active && e.userData.type !== 'DOOR') return;
+                if (e.position.distanceTo(new THREE.Vector3(px, py, 0)) < 0.1) {
+                    if (e.userData.type === 'NPC') {
+                        const box = document.getElementById('dialogue-box');
+                        const text = document.getElementById('diag-text');
+                        const opts = document.getElementById('diag-options');
+                        box.style.display = 'flex';
+                        gameState = 'DIALOGUE';
+                        
+                        if (!metGuard) {
+                            text.innerText = "THE GOBLINS INFEST THE NORTHERN HALLS. FIND THE CLAYMORE TO THE WEST BEFORE FACING THEIR KING.";
+                            opts.innerHTML = `<button class="btn" onclick="closeDialogue()">[X] I WILL PROCEED</button>`;
+                            metGuard = true;
+                        } else {
+                            text.innerText = "YOU LOOK WEARY, ADVENTURER. REST NEAR THE GUARD TO REGAIN HEALTH?";
+                            opts.innerHTML = `<button class="btn" onclick="restHero()">[Y] YES</button><button class="btn" onclick="closeDialogue()">[N] NO</button>`;
+                        }
+                    } else if (e.userData.type === 'SWORD') {
+                        e.userData.active = false; e.visible = false; weaponBonus = 5;
+                        updateLog("CLAYMORE ACQUIRED. ATK MOD +5."); updateUI();
+                    } else if (e.userData.type === 'BOSS') {
+                        triggerEncounter(e);
+                    } else if (e.userData.type === 'DOOR' && e.visible) {
+                        updateLog("LEVEL COMPLETE. VENTURING DEEPER...");
                     }
                 }
             });
         }
 
+        // --- COMBAT & VICTORY ---
+        window.resolveCombat = (action) => {
+            const roll = Math.floor(Math.random() * 20) + 1;
+            const log = document.getElementById('combat-log');
+            if (action === 'ATTACK') {
+                if (roll + 4 + weaponBonus >= currentEnemy.userData.ac) {
+                    currentEnemy.userData.health -= (5 + weaponBonus);
+                    log.innerText = `CRITICAL HIT! FOE HEALTH: ${currentEnemy.userData.health}`;
+                    if(currentEnemy.userData.health <= 0) handleBossDeath();
+                } else {
+                    hp -= 2; log.innerText = `MISS! FOE COUNTERS FOR 2 DMG.`;
+                }
+            } else {
+                if (roll + 2 >= 12) log.innerText = `DODGED SUCCESSFULY.`;
+                else { hp -= 1; log.innerText = `FAILED DODGE. 1 DMG TAKEN.`; }
+            }
+            updateUI();
+            if(hp <= 0) location.reload();
+        };
+
+        function handleBossDeath() {
+            currentEnemy.userData.active = false; currentEnemy.visible = false;
+            document.getElementById('encounter-overlay').style.display = 'none';
+            document.getElementById('victory-screen').style.display = 'flex';
+            gameState = 'VICTORY';
+            
+            // Fanfare & Door Appearance
+            victoryDoor.visible = true;
+            let flashes = 0;
+            const interval = setInterval(() => {
+                victoryDoor.material.color.set(flashes % 2 === 0 ? 0xffffff : AMBER);
+                if(++flashes > 10) {
+                    clearInterval(interval);
+                    victoryDoor.material.color.set(AMBER);
+                }
+            }, 150);
+        }
+
+        window.closeVictory = () => {
+            document.getElementById('victory-screen').style.display = 'none';
+            gameState = 'RUNNING';
+            updateLog("THE WAY IS OPEN. HEAD NORTH.");
+        };
+
+        // --- ENGINE ---
+        function move(dx, dy) {
+            if (gameState !== 'RUNNING') return;
+            targetWorldPos.x -= dx; targetWorldPos.y -= dy;
+            checkInteractions(-targetWorldPos.x, -targetWorldPos.y);
+        }
+
         function updateUI() {
             document.getElementById('hp-bar').innerText = "|".repeat(Math.max(0, hp));
-            document.getElementById('atk-mod').innerText = str + weaponBonus;
-            document.getElementById('weap-name').innerText = hasSword ? "IRON CLAYMORE" : "NONE";
+            document.getElementById('weap-name').innerText = weaponBonus > 0 ? "CLAYMORE" : "NONE";
         }
         function updateLog(msg) { document.getElementById('log-content').innerHTML = `> ${msg}<br>` + document.getElementById('log-content').innerHTML; }
 
-        // --- INPUTS ---
         window.addEventListener('keydown', (e) => {
             if(e.code.includes('Up')) move(0,1); if(e.code.includes('Down')) move(0,-1);
             if(e.code.includes('Left')) move(-1,0); if(e.code.includes('Right')) move(1,0);
         });
 
-        // --- LOOP ---
         function animate() {
             requestAnimationFrame(animate);
             worldGroup.position.lerp(targetWorldPos, 0.15);
