@@ -3,54 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Amber Dungeons v9.11</title>
+    <title>Amber Dungeons v11.2</title>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
-        :root { --amber: #ffb000; --amber-dim: #442e00; --bg: #050300; --white: #ffffff; }
-        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'VT323', monospace; color: var(--amber); touch-action: none; text-transform: uppercase; }
+        :root { --amber: #ffb000; --bg: #050300; --blue: #1a1c2c; --grey: #8b93af; --white: #ffffff; }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'VT323', monospace; color: var(--amber); touch-action: none; text-transform: uppercase; transition: background 1s; }
         
         .overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg); z-index: 500; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 4px solid var(--amber); box-sizing: border-box; text-align: center; }
         .popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 500px; background: var(--bg); border: 4px double var(--amber); padding: 20px; z-index: 300; display: none; flex-direction: column; align-items: center; text-align: center; }
         .btn { background: var(--bg); border: 2px solid var(--amber); color: var(--amber); padding: 12px 20px; cursor: pointer; font-family: 'VT323'; font-size: 1.3rem; margin: 5px; }
-        .btn:active { background: var(--amber); color: var(--bg); }
 
-        #status-bar { position: fixed; top: 0; width: 100%; height: 50px; background: var(--amber); color: var(--bg); display: flex; justify-content: space-around; align-items: center; font-weight: bold; z-index: 20; }
-        #text-buffer { position: fixed; bottom: 10px; left: 10px; right: 10px; height: 60px; border: 1px solid var(--amber-dim); background: rgba(5, 3, 0, 0.9); padding: 10px; z-index: 20; font-size: 1.1rem; overflow: hidden; }
-        .scanlines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%); background-size: 100% 4px; pointer-events: none; z-index: 600; }
+        #status-bar { position: fixed; top: 0; width: 100%; height: 55px; background: var(--amber); color: var(--bg); display: flex; justify-content: space-around; align-items: center; font-weight: bold; z-index: 20; transition: background 0.5s; }
+        #text-buffer { position: fixed; bottom: 10px; left: 10px; right: 10px; height: 65px; border: 1px solid #442e00; background: rgba(5, 3, 0, 0.9); padding: 10px; z-index: 20; font-size: 1.1rem; overflow: hidden; }
+        #scanlines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%); background-size: 100% 4px; pointer-events: none; z-index: 600; }
     </style>
 </head>
 <body>
 
     <div id="splash-screen" class="overlay">
-        <h1>AMBER DUNGEONS</h1>
-        <p>RESTORING PLAYER_ICON.EXE...</p>
+        <h1>ALISTAIR BOOKBINDER</h1>
+        <p>CHAPTER 1: THE COBALT CRYPT</p>
         <button class="btn" onclick="startGame()">Venture Forth</button>
-    </div>
-
-    <div id="encounter-overlay" class="popup">
-        <h2 id="foe-name">FOE</h2>
-        <div id="combat-log">> READY...</div>
-        <div style="display:flex;">
-            <button class="btn" onclick="resolveCombat('ATTACK')">[A]TTACK</button>
-            <button class="btn" onclick="resolveCombat('ESCAPE')">[E]SCAPE</button>
-        </div>
     </div>
 
     <div id="dialogue-box" class="popup">
         <h3 id="diag-title">MESSAGE</h3>
         <p id="diag-text">...</p>
-        <div id="diag-options" style="display:flex;"></div>
+        <div id="diag-options" style="display:flex; flex-wrap: wrap; justify-content: center;"></div>
+    </div>
+
+    <div id="encounter-overlay" class="popup">
+        <h2 id="foe-name">FOE</h2>
+        <div id="combat-log">> READY...</div>
+        <button class="btn" onclick="resolveCombat('ATTACK')">[A]TTACK</button>
+        <button class="btn" onclick="resolveCombat('ESCAPE')">[E]SCAPE</button>
     </div>
 
     <div id="status-bar">
         <div>HP: [<span id="hp-bar">||||||||||||||||||||</span>]</div>
-        <div>ATK: +<span id="atk-val">4</span></div>
-        <div>LOC: <span id="loc-val">0,0</span></div>
+        <div>LVL: <span id="lvl-val">1</span> | ATK: +<span id="atk-val">4</span></div>
     </div>
 
-    <div class="scanlines"></div>
+    <div id="scanlines"></div>
     <div id="game-container"></div>
-    <div id="text-buffer"><div id="log-content">> SEARCHING...</div></div>
+    <div id="text-buffer"><div id="log-content">> INITIALIZING...</div></div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -58,146 +54,171 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- STATE ---
-        let hp = 20, str = 4, dex = 2, weaponBonus = 0, gameState = 'SPLASH';
-        let prevPos = { x: 0, y: 0 }, currentEnemy = null;
+        // --- RPG STATE ---
+        let hp = 20, maxHp = 20, str = 4, weaponBonus = 0, currentLevel = 1, score = 0;
+        let gameState = 'SPLASH', metGuard = false, currentEnemy = null;
+        let walls = new Set(), entities = [];
         const AMBER = 0xffb000;
 
-        // --- SCENE ---
+        // --- SCENE SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.OrthographicCamera(-8, 8, 4.5, -4.5, 0.1, 1000); camera.position.z = 10;
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('game-container').appendChild(renderer.domElement);
-        
-        const worldGroup = new THREE.Group(); 
-        const targetWorldPos = new THREE.Vector3(0, 0, 0); 
-        scene.add(worldGroup);
+        const worldGroup = new THREE.Group(); const targetWorldPos = new THREE.Vector3(0, 0, 0); scene.add(worldGroup);
 
-        // --- PLAYER ICON (RESTORED) ---
-        const playerIcon = new THREE.Mesh(
-            new THREE.OctahedronGeometry(0.35, 0), 
-            new THREE.MeshBasicMaterial({ color: AMBER, wireframe: true, transparent: true, opacity: 0.9 })
-        );
-        playerIcon.position.z = 2; // High Z to prevent clipping
-        playerIcon.frustumCulled = false;
+        // --- PIXEL TEXTURE ENGINE ---
+        function createPixelTex(data, size) {
+            const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            data.forEach((c, i) => { if(c!=='n'){ ctx.fillStyle=c; ctx.fillRect(i%size, Math.floor(i/size), 1, 1); }});
+            const tex = new THREE.CanvasTexture(canvas); tex.magFilter = THREE.NearestFilter; return tex;
+        }
+
+        const heroMap = ['n','n','#f4cccc','#f4cccc','n','n', 'n','#f4cccc','#f4cccc','#f4cccc','#f4cccc','n', 'n','#3d85c6','#3d85c6','#3d85c6','#3d85c6','n', '#3d85c6','#3d85c6','#3d85c6','#3d85c6','#3d85c6','#3d85c6', 'n','#073763','#073763','#073763','#073763','n', 'n','#073763','n','n','#073763','n'];
+        
+        let playerIcon = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), new THREE.MeshBasicMaterial({color: AMBER, wireframe: true}));
         scene.add(playerIcon);
 
-        // --- DUNGEON LAYOUT ---
-        const walls = new Set([
-            // Corridors & Rooms
-            "1,1","0,1","-1,1", // North Wall
-            "-2,0","-2,-1","-2,-2", // West Corridor Wall
-            "2,0","2,-1","2,-2", // East Corridor Wall
-            "0,4","1,4","-1,4", // Room Entry
-            "3,7","4,7","5,7","6,7","7,7", // Throne Room South Wall
-            "3,9","4,9","5,9","6,9","7,9", // Throne Room North Wall
-            "2,8","2,9","2,7" // Throne Room West Wall
-        ]);
+        // --- LEVEL LOGIC ---
+        window.startGame = () => { gameState = 'RUNNING'; document.getElementById('splash-screen').style.display = 'none'; loadLevel(1); };
 
-        walls.forEach(coord => {
-            const [x, y] = coord.split(',').map(Number);
-            const wall = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.5), new THREE.MeshBasicMaterial({ color: 0x442200, wireframe: true }));
-            wall.position.set(x, y, 0.25);
-            worldGroup.add(wall);
-        });
-
-        const grid = new THREE.GridHelper(40, 40, 0x221100, 0x110800); grid.rotation.x = Math.PI / 2; worldGroup.add(grid);
-
-        // --- ENTITIES ---
-        const entities = [];
-        function spawn(x, y, type, name, ac, health) {
-            let geo = (type === 'BOSS') ? new THREE.TorusKnotGeometry(0.4, 0.1) : new THREE.IcosahedronGeometry(0.35, 0);
-            if(type === 'NPC') geo = new THREE.CylinderGeometry(0, 0.3, 0.6, 4);
-            if(type === 'SWORD') geo = new THREE.BoxGeometry(0.1, 0.6, 0.1);
+        function loadLevel(num) {
+            currentLevel = num;
+            entities.forEach(e => worldGroup.remove(e)); entities = []; walls.clear();
+            worldGroup.position.set(0,0,0); targetWorldPos.set(0,0,0);
             
-            const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: type === 'NPC' ? 0x00ffff : (type === 'SWORD' ? 0xffffff : AMBER), wireframe: true }));
-            mesh.position.set(x, y, 0.3);
-            mesh.userData = { type, name, ac, health, active: true };
-            worldGroup.add(mesh); entities.push(mesh);
-        }
+            if (num === 1) {
+                // LEVEL 1: AMBER WIREFRAME
+                for(let x=-15; x<=15; x++) { walls.add(`${x},-10`); walls.add(`${x},15`); }
+                spawn(1, 0, 'NPC', 'GUARD');
+                spawn(-5, -5, 'SWORD', 'CLAYMORE');
+                spawn(5, 8, 'BOSS', 'GOBLIN_KING', 18, 30);
+                spawn(5, 12, 'DOOR', 'PORTAL');
+                buildWalls(0x442200, true);
+            } else {
+                // LEVEL 2: COBALT 16-BIT
+                gameState = 'LEVEL2';
+                document.body.style.background = "#1a1c2c";
+                document.getElementById('status-bar').style.background = "#3a3f5e";
+                document.getElementById('status-bar').style.color = "#ffffff";
+                
+                scene.remove(playerIcon);
+                const spriteMat = new THREE.SpriteMaterial({ map: createPixelTex(heroMap, 6) });
+                playerIcon = new THREE.Sprite(spriteMat);
+                playerIcon.scale.set(0.8, 0.8, 1); scene.add(playerIcon);
 
-        spawn(1, 0, 'NPC', 'GUARD', 0, 0);
-        spawn(-3, -2, 'SWORD', 'CLAYMORE', 0, 0); // Sword Room
-        spawn(0, 3, 'ENEMY', 'GOBLIN', 10, 5);    // Hallway Sentry
-        spawn(5, 8, 'BOSS', 'GOBLIN_KING', 18, 25); // Throne Room
+                // Level 2 Walls & Floor
+                for(let x=-10; x<=10; x++) { walls.add(`${x},-6`); walls.add(`${x},6`); }
+                buildWalls(0x8b93af, false);
 
-        // --- ENGINE ---
-        window.startGame = () => { gameState = 'RUNNING'; document.getElementById('splash-screen').style.display = 'none'; };
-        window.closeDialogue = () => { gameState = 'RUNNING'; document.getElementById('dialogue-box').style.display = 'none'; };
-
-        function move(dx, dy) {
-            if (gameState !== 'RUNNING') return;
-            const nextX = Math.round(-targetWorldPos.x + dx);
-            const nextY = Math.round(-targetWorldPos.y + dy);
-
-            if (walls.has(`${nextX},${nextY}`)) {
-                updateLog("THUD. WALL DETECTED.");
-                return;
+                spawn(3, 0, 'ENEMY', 'SKELETON', 13, 10);
+                spawn(-3, 2, 'ENEMY', 'SLIME', 8, 15);
+                spawn(0, 4, 'CHEST', 'TREASURE', 0, 0);
+                spawn(-5, -2, 'ALTAR', 'SHRINE', 0, 0);
+                updateLog("LEVEL 2: THE COBALT CRYPT INITIALIZED.");
             }
-
-            prevPos = { x: targetWorldPos.x, y: targetWorldPos.y };
-            targetWorldPos.x -= dx;
-            targetWorldPos.y -= dy;
-            document.getElementById('loc-val').innerText = `${nextX},${nextY}`;
-            checkInteractions(nextX, nextY);
+            updateUI();
         }
 
+        function buildWalls(color, wire) {
+            walls.forEach(c => {
+                const [x,y] = c.split(',').map(Number);
+                const m = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.9,0.5), new THREE.MeshBasicMaterial({color, wireframe: wire}));
+                m.position.set(x,y,0.2); worldGroup.add(m);
+            });
+        }
+
+        function spawn(x, y, type, name, ac=0, health=0) {
+            let geo = (type==='BOSS') ? new THREE.TorusKnotGeometry(0.4,0.1) : new THREE.BoxGeometry(0.5,0.5,0.5);
+            if(type==='NPC') geo = new THREE.CylinderGeometry(0,0.3,0.6,4);
+            if(type==='ALTAR') geo = new THREE.OctahedronGeometry(0.5);
+            
+            let color = (type==='ENEMY'||type==='BOSS') ? 0xff4444 : (type==='NPC'? 0x00ffff : 0x38b764);
+            if(gameState==='LEVEL2' && type==='ENEMY') color = name==='SKELETON'? 0xffffff : 0x38b764;
+
+            const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color, wireframe: currentLevel===1}));
+            m.position.set(x,y,0.3); m.userData = {type, name, ac, health, active: true};
+            worldGroup.add(m); entities.push(m);
+        }
+
+        // --- INTERACTIONS ---
         function checkInteractions(px, py) {
             entities.forEach(e => {
-                if (!e.userData.active) return;
-                if (e.position.x === px && e.position.y === py) {
-                    if (e.userData.type === 'NPC') {
-                        gameState = 'DIALOGUE';
-                        const box = document.getElementById('dialogue-box');
-                        box.style.display = 'flex';
-                        document.getElementById('diag-text').innerText = "THE KING HIDES IN THE NORTHEAST THRONE ROOM. THE CLAYMORE LIES TO THE SOUTHWEST.";
-                        document.getElementById('diag-options').innerHTML = `<button class="btn" onclick="closeDialogue()">UNDERSTOOD</button>`;
-                    } else if (e.userData.type === 'SWORD') {
-                        e.userData.active = false; e.visible = false; weaponBonus = 5;
-                        updateLog("CLAYMORE ACQUIRED. ATK +5."); updateUI();
-                    } else if (e.userData.type.includes('ENEMY') || e.userData.type === 'BOSS') {
-                        triggerEncounter(e);
-                    }
+                if(!e.userData.active && e.userData.type!=='DOOR') return;
+                if(e.position.x === px && e.position.y === py) {
+                    if(e.userData.type === 'NPC') triggerDialogue('GUARD', "GOBLINS TO THE NORTH. SWORD TO THE SOUTHWEST.");
+                    else if(e.userData.type === 'SWORD') { e.visible=false; e.userData.active=false; weaponBonus=5; updateLog("ATK MOD +5"); }
+                    else if(e.userData.type === 'CHEST') triggerDialogue('CHEST', "AN ANCIENT CHEST. OPEN IT?", true);
+                    else if(e.userData.type === 'ALTAR') triggerDialogue('ALTAR', "A COBALT SHRINE. PRAY FOR STRENGTH?", true);
+                    else if(e.userData.type === 'DOOR' && e.visible) loadLevel(2);
+                    else if(e.userData.type === 'ENEMY' || e.userData.type === 'BOSS') { currentEnemy = e; triggerEncounter(); }
                 }
             });
         }
 
-        function triggerEncounter(e) {
-            gameState = 'ENCOUNTER'; currentEnemy = e;
-            document.getElementById('foe-name').innerText = e.userData.name;
+        window.triggerDialogue = (type, text, isAction = false) => {
+            gameState = 'DIALOGUE';
+            const box = document.getElementById('dialogue-box');
+            document.getElementById('diag-text').innerText = text;
+            const opts = document.getElementById('diag-options');
+            box.style.display = 'flex';
+            
+            if(type === 'CHEST') {
+                opts.innerHTML = `<button class="btn" onclick="resolveAction('CHEST')">OPEN</button><button class="btn" onclick="closeDiag()">LEAVE</button>`;
+            } else if(type === 'ALTAR') {
+                opts.innerHTML = `<button class="btn" onclick="resolveAction('ALTAR')">PRAY</button><button class="btn" onclick="closeDiag()">LEAVE</button>`;
+            } else {
+                opts.innerHTML = `<button class="btn" onclick="closeDiag()">PROCEED</button>`;
+            }
+        };
+
+        window.resolveAction = (type) => {
+            const e = entities.find(ent => ent.userData.type === type && ent.userData.active);
+            if(type === 'CHEST') {
+                if(Math.random() > 0.5) { hp = Math.min(maxHp, hp+5); updateLog("FOUND POTION: +5 HP"); }
+                else { score += 500; updateLog("FOUND GOLD: +500 SCORE"); }
+                e.userData.active = false; e.visible = false;
+            } else if(type === 'ALTAR') {
+                maxHp += 5; hp += 5; updateLog("MAX HP INCREASED TO " + maxHp);
+                e.userData.active = false; e.material.color.set(0x444444);
+            }
+            closeDiag(); updateUI();
+        };
+
+        window.closeDiag = () => { gameState = (currentLevel===1?'RUNNING':'LEVEL2'); document.getElementById('dialogue-box').style.display = 'none'; };
+
+        function triggerEncounter() {
+            gameState = 'ENCOUNTER';
+            document.getElementById('foe-name').innerText = currentEnemy.userData.name;
             document.getElementById('encounter-overlay').style.display = 'flex';
         }
 
         window.resolveCombat = (action) => {
             const roll = Math.floor(Math.random() * 20) + 1;
-            const log = document.getElementById('combat-log');
-            if (action === 'ATTACK') {
-                if (roll + str + weaponBonus >= currentEnemy.userData.ac) {
-                    currentEnemy.userData.health -= (5 + weaponBonus);
-                    log.innerText = `HIT! FOE HP: ${currentEnemy.userData.health}`;
-                    if(currentEnemy.userData.health <= 0) {
-                        currentEnemy.userData.active = false; currentEnemy.visible = false;
-                        document.getElementById('encounter-overlay').style.display = 'none';
-                        gameState = 'RUNNING';
-                        updateLog("FOE SLAIN.");
+            if(action === 'ATTACK') {
+                if(roll+str+weaponBonus >= currentEnemy.userData.ac) {
+                    currentEnemy.userData.health -= (5+weaponBonus);
+                    if(currentEnemy.userData.health <= 0) { 
+                        currentEnemy.visible=false; currentEnemy.userData.active=false;
+                        document.getElementById('encounter-overlay').style.display='none';
+                        gameState = currentLevel===1?'RUNNING':'LEVEL2';
+                        if(currentEnemy.userData.type === 'BOSS') entities.find(d=>d.userData.type==='DOOR').visible=true;
                     }
-                } else {
-                    hp -= 2; log.innerText = `MISS! YOU TAKE 2 DMG.`;
-                }
-            } else if (action === 'ESCAPE') {
-                if (roll + dex >= 12) {
-                    gameState = 'RUNNING';
-                    document.getElementById('encounter-overlay').style.display = 'none';
-                    targetWorldPos.set(prevPos.x, prevPos.y, 0); // Push back
-                    updateLog("SUCCESSFUL DISENGAGE.");
-                } else {
-                    hp -= 1; log.innerText = `ESCAPE FAILED! 1 DMG TAKEN.`;
-                }
-            }
-            updateUI();
-            if (hp <= 0) location.reload();
+                } else { hp -= 2; }
+            } else { gameState = currentLevel===1?'RUNNING':'LEVEL2'; document.getElementById('encounter-overlay').style.display='none'; }
+            updateUI(); if(hp <= 0) location.reload();
         };
+
+        // --- ENGINE ---
+        function move(dx, dy) {
+            if(gameState !== 'RUNNING' && gameState !== 'LEVEL2') return;
+            const nx = Math.round(-targetWorldPos.x + dx), ny = Math.round(-targetWorldPos.y + dy);
+            if(walls.has(`${nx},${ny}`)) return;
+            targetWorldPos.x -= dx; targetWorldPos.y -= dy;
+            checkInteractions(nx, ny);
+        }
 
         function updateUI() {
             document.getElementById('hp-bar').innerText = "|".repeat(Math.max(0, hp));
@@ -205,24 +226,15 @@
         }
         function updateLog(msg) { document.getElementById('log-content').innerHTML = `> ${msg}<br>` + document.getElementById('log-content').innerHTML; }
 
-        // --- INPUTS ---
-        window.addEventListener('keydown', (e) => {
+        window.addEventListener('keydown', e => {
             if(e.code.includes('Up')) move(0,1); if(e.code.includes('Down')) move(0,-1);
             if(e.code.includes('Left')) move(-1,0); if(e.code.includes('Right')) move(1,0);
-        });
-
-        window.addEventListener('touchstart', (e) => {
-            if (gameState !== 'RUNNING') return;
-            const x = e.touches[0].clientX / window.innerWidth;
-            const y = e.touches[0].clientY / window.innerHeight;
-            if (y < 0.3) move(0, 1); else if (y > 0.7) move(0, -1);
-            else if (x < 0.3) move(-1, 0); else if (x > 0.7) move(1, 0);
         });
 
         function animate() {
             requestAnimationFrame(animate);
             worldGroup.position.lerp(targetWorldPos, 0.15);
-            playerIcon.rotation.y += 0.05;
+            playerIcon.rotation.y += 0.02;
             renderer.render(scene, camera);
         }
         animate();
