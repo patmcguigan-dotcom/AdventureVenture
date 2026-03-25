@@ -3,72 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Amber Dungeons v9.5 - Combat</title>
+    <title>Amber Dungeons v9.8 - The Quest</title>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
-        :root { --amber: #ffb000; --amber-dim: #775200; --bg: #0a0500; --red: #ff3300; }
+        :root { --amber: #ffb000; --amber-dim: #553a00; --bg: #050300; --red: #ff3300; }
         body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'VT323', monospace; color: var(--amber); touch-action: none; text-transform: uppercase; }
         
         /* UI OVERLAYS */
-        #encounter-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(10, 5, 0, 0.95); z-index: 150; display: none;
-            flex-direction: column; justify-content: center; align-items: center;
-            border: 10px double var(--amber); box-sizing: border-box;
+        #dialogue-box, #encounter-overlay {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 80%; max-width: 500px; background: var(--bg); border: 4px double var(--amber);
+            padding: 20px; z-index: 300; display: none; flex-direction: column; align-items: center; text-align: center;
         }
-        #monster-art { font-size: 10px; line-height: 8px; margin-bottom: 20px; white-space: pre; color: var(--amber); text-shadow: 0 0 5px var(--amber); }
-        
-        .combat-menu { display: flex; gap: 20px; margin-top: 20px; }
+
         .btn {
             background: var(--bg); border: 2px solid var(--amber); color: var(--amber);
-            padding: 15px 25px; cursor: pointer; font-family: 'VT323'; font-size: 1.5rem;
+            padding: 10px 20px; cursor: pointer; font-family: 'VT323'; font-size: 1.2rem; margin-top: 15px;
         }
         .btn:active { background: var(--amber); color: var(--bg); }
 
         #status-bar {
-            position: fixed; top: 0; width: 100%; height: 35px;
+            position: fixed; top: 0; width: 100%; height: 50px;
             background: var(--amber); color: var(--bg);
             display: flex; justify-content: space-around; align-items: center;
-            font-size: 1.2rem; font-weight: bold; z-index: 20;
+            font-size: 1rem; font-weight: bold; z-index: 20;
         }
         #text-buffer {
-            position: fixed; bottom: 10px; left: 10px; right: 10px; height: 80px;
-            border: 1px solid var(--amber-dim); background: rgba(10, 5, 0, 0.9);
-            padding: 10px; z-index: 20; font-size: 1.2rem; overflow: hidden;
+            position: fixed; bottom: 10px; left: 10px; right: 10px; height: 60px;
+            border: 1px solid var(--amber-dim); background: rgba(5, 3, 0, 0.9);
+            padding: 10px; z-index: 20; font-size: 1.1rem; overflow: hidden;
         }
-        .scanlines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%); background-size: 100% 4px; pointer-events: none; z-index: 200; }
+        .scanlines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%); background-size: 100% 4px; pointer-events: none; z-index: 400; }
     </style>
 </head>
 <body>
 
     <div id="status-bar">
-        <span>HERO: ALISTAIR</span>
-        <span>HP: [<span id="hp-bar">||||||||||||||||||||</span>]</span>
-        <span>LEVEL: 01</span>
+        <div>HERO: ALISTAIR<br>HP: [<span id="hp-bar">||||||||||||||||||||</span>]</div>
+        <div>ATK MOD: +<span id="atk-mod">4</span><br>WEAPON: <span id="weap-name">NONE</span></div>
+        <div>GOBLINS: <span id="gob-count">5</span></div>
+    </div>
+
+    <div id="dialogue-box">
+        <h3 id="diag-title">MESSAGE</h3>
+        <p id="diag-text">...</p>
+        <button class="btn" onclick="closeDialogue()">[X] CLOSE</button>
     </div>
 
     <div id="encounter-overlay">
-        <h2 id="monster-name">FOE SPOTTED</h2>
-        <div id="monster-art">
- / \
-(O O)
- \-/ 
- /|\
-/ | \
-        </div>
+        <h2 id="foe-name">FOE</h2>
         <div id="combat-log">> AWAITING ACTION...</div>
-        <div class="combat-menu">
-            <button class="btn" id="btn-attack">[A]TTACK</button>
-            <button class="btn" id="btn-dodge">[D]ODGE</button>
+        <div style="display:flex; gap:10px;">
+            <button class="btn" onclick="resolveCombat('ATTACK')">[A]TTACK</button>
+            <button class="btn" onclick="resolveCombat('DODGE')">[D]ODGE</button>
         </div>
     </div>
 
     <div class="scanlines"></div>
     <div id="game-container"></div>
-
-    <div id="text-buffer">
-        <div id="log-content">> SEARCHING SECTOR...</div>
-    </div>
+    <div id="text-buffer"><div id="log-content">> MISSION START...</div></div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -76,144 +69,130 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- RPG STATS ---
-        let hp = 20;
-        let strMod = 4; // Barbarian Strength
-        let dexMod = 2;
-        let gameState = 'RUNNING'; // RUNNING, ENCOUNTER, GAMEOVER
-        let currentEnemy = null;
+        // --- GAME STATE ---
+        let hp = 20, str = 4, weaponBonus = 0, level = 1, gameState = 'RUNNING';
+        let hasSword = false, currentEnemy = null;
+        const AMBER = 0xffb000;
 
+        // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
-        const camera = new THREE.OrthographicCamera(-8, 8, 4.5, -4.5, 0.1, 1000);
-        camera.position.z = 10;
+        const camera = new THREE.OrthographicCamera(-8, 8, 4.5, -4.5, 0.1, 1000); camera.position.z = 10;
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('game-container').appendChild(renderer.domElement);
+        const worldGroup = new THREE.Group(); const targetWorldPos = new THREE.Vector3(0, 0, 0); scene.add(worldGroup);
 
-        const worldGroup = new THREE.Group();
-        const targetWorldPos = new THREE.Vector3(0, 0, 0);
-        scene.add(worldGroup);
+        // --- MAP & WALLS ---
+        const grid = new THREE.GridHelper(40, 40, 0x332200, 0x110800); grid.rotation.x = Math.PI / 2; worldGroup.add(grid);
+        function addWall(x, y) {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.5), new THREE.MeshBasicMaterial({ color: AMBER, wireframe: true }));
+            mesh.position.set(x, y, 0); worldGroup.add(mesh);
+        }
+        // Build a small "Throne Room" for the boss
+        for(let i=3; i<=7; i++) { addWall(i, 4); addWall(i, 6); }
+        addWall(3, 5);
 
-        // --- ICONOGRAPHY ---
-        const AMBER = 0xffb000;
-        const RED = 0xff3300;
-
-        // Player (The Hero)
-        const playerIcon = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), new THREE.MeshBasicMaterial({ color: AMBER, wireframe: true }));
-        scene.add(playerIcon);
-
-        // Enemies & Traps
+        // --- ENTITIES ---
         const entities = [];
-        function addEntity(x, y, type) {
-            let geo = type === 'TRAP' ? new THREE.TorusGeometry(0.2, 0.05, 8, 4) : new THREE.IcosahedronGeometry(0.4, 0);
-            let color = type === 'TRAP' ? RED : AMBER;
-            let mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: color, wireframe: true }));
+        function spawn(x, y, type, name, ac, health) {
+            let geo = (type === 'BOSS') ? new THREE.TorusKnotGeometry(0.4, 0.1) : new THREE.IcosahedronGeometry(0.4, 0);
+            if(type === 'NPC') geo = new THREE.CylinderGeometry(0, 0.3, 0.6, 4);
+            if(type === 'SWORD') geo = new THREE.BoxGeometry(0.1, 0.6, 0.1);
+
+            const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: type === 'NPC' ? 0x00ffff : AMBER, wireframe: true }));
             mesh.position.set(x, y, 0);
-            mesh.userData = { type, active: true, name: type === 'TRAP' ? 'SPIKE_TRAP' : 'GOBLIN_SQUAD' };
-            worldGroup.add(mesh);
-            entities.push(mesh);
+            mesh.userData = { type, name, ac, health, active: true };
+            worldGroup.add(mesh); entities.push(mesh);
         }
 
-        addEntity(2, 0, 'ENEMY');
-        addEntity(-2, -2, 'TRAP');
-        addEntity(0, 3, 'ENEMY');
+        spawn(1, 0, 'NPC', 'INJURED_GUARD', 0, 0);   // Friendly NPC
+        spawn(-2, -1, 'SWORD', 'IRON_CLAYMORE', 0, 0); // The Powerup
+        spawn(2, 2, 'ENEMY', 'GOBLIN_SCOUT', 10, 5);
+        spawn(4, -2, 'ENEMY', 'GOBLIN_THUG', 12, 8);
+        spawn(5, 5, 'BOSS', 'GOBLIN_KING', 18, 20); // The Big Boss
 
-        // --- COMBAT LOGIC ---
-        function triggerEncounter(entity) {
-            gameState = 'ENCOUNTER';
-            currentEnemy = entity;
-            document.getElementById('monster-name').innerText = entity.userData.name;
-            document.getElementById('encounter-overlay').style.display = 'flex';
-            updateCombatLog(`A ${entity.userData.name} BLOCKS YOUR PATH!`);
-        }
+        // --- UI & DIALOGUE ---
+        window.openDialogue = (title, text) => {
+            gameState = 'DIALOGUE';
+            document.getElementById('diag-title').innerText = title;
+            document.getElementById('diag-text').innerText = text;
+            document.getElementById('dialogue-box').style.display = 'flex';
+        };
+        window.closeDialogue = () => {
+            gameState = 'RUNNING';
+            document.getElementById('dialogue-box').style.display = 'none';
+        };
 
-        function resolveCombat(action) {
+        // --- COMBAT SYSTEM ---
+        window.resolveCombat = (action) => {
             const roll = Math.floor(Math.random() * 20) + 1;
+            const totalAtk = roll + str + weaponBonus;
+            const log = document.getElementById('combat-log');
+
             if (action === 'ATTACK') {
-                const total = roll + strMod;
-                if (total >= 12) {
-                    updateCombatLog(`SUCCESS! ROLL ${total} CRUSHES FOE.`);
-                    setTimeout(victory, 1000);
+                if (totalAtk >= currentEnemy.userData.ac) {
+                    currentEnemy.userData.health -= (5 + weaponBonus);
+                    log.innerText = `HIT! ROLL ${totalAtk} vs AC ${currentEnemy.userData.ac}.`;
+                    if(currentEnemy.userData.health <= 0) victory();
                 } else {
-                    takeDamage(3, `FAIL! ROLL ${total} MISSED. FOE STRIKES.`);
+                    hp -= 2; log.innerText = `MISS! ROLL ${totalAtk} vs AC ${currentEnemy.userData.ac}. FOE STRIKES!`;
                 }
             } else { // Dodge
-                const total = roll + dexMod;
-                if (total >= 10) {
-                    updateCombatLog(`DODGED! ROLL ${total} EVADES HARM.`);
-                    setTimeout(victory, 800);
-                } else {
-                    takeDamage(1, `CLUMSY! ROLL ${total}. TAKING MINOR HIT.`);
-                }
+                if (roll + 2 >= 12) log.innerText = `EVADED! ROLL ${roll+2}.`;
+                else { hp -= 1; log.innerText = `NICKED! ROLL ${roll+2}.`; }
             }
-        }
-
-        function takeDamage(amt, msg) {
-            hp -= amt;
-            updateCombatLog(msg);
             updateUI();
-            if (hp <= 0) {
-                gameState = 'GAMEOVER';
-                location.reload(); // Simple reset
-            }
-        }
+            if (hp <= 0) location.reload();
+        };
 
         function victory() {
-            currentEnemy.visible = false;
-            currentEnemy.userData.active = false;
+            currentEnemy.visible = false; currentEnemy.userData.active = false;
             document.getElementById('encounter-overlay').style.display = 'none';
             gameState = 'RUNNING';
-            updateLog("FOE VANQUISHED. PROCEED.");
+            updateLog(`${currentEnemy.userData.name} DEFEATED.`);
+            document.getElementById('gob-count').innerText = entities.filter(e => e.userData.active && (e.userData.type === 'ENEMY' || e.userData.type === 'BOSS')).length;
         }
 
-        // --- NAVIGATION ---
+        // --- INTERACTION ---
         function move(dx, dy) {
             if (gameState !== 'RUNNING') return;
-            targetWorldPos.x -= dx;
-            targetWorldPos.y -= dy;
-            
-            // Check for collision after move
-            const nextCoord = new THREE.Vector3(-targetWorldPos.x, -targetWorldPos.y, 0);
+            targetWorldPos.x -= dx; targetWorldPos.y -= dy;
+            const px = -targetWorldPos.x, py = -targetWorldPos.y;
+
             entities.forEach(e => {
-                if (e.userData.active && e.position.distanceTo(nextCoord) < 0.1) {
-                    triggerEncounter(e);
+                if (e.userData.active && e.position.distanceTo(new THREE.Vector3(px, py, 0)) < 0.1) {
+                    if (e.userData.type === 'NPC') openDialogue(e.userData.name, "THE GOBLINS... THEY HAVE TAKEN THE LOWER HALLS. YOU MUST REMOVE THE INFESTATION. SEEK THE IRON CLAYMORE TO THE WEST IF YOU HOPE TO CHALLENGE THEIR KING.");
+                    else if (e.userData.type === 'SWORD') {
+                        e.userData.active = false; e.visible = false; hasSword = true; weaponBonus = 5;
+                        updateLog("PICKED UP IRON CLAYMORE. ATK MOD INCREASED.");
+                        updateUI();
+                    } else { // ENEMY or BOSS
+                        currentEnemy = e;
+                        document.getElementById('foe-name').innerText = e.userData.name;
+                        document.getElementById('encounter-overlay').style.display = 'flex';
+                        gameState = 'ENCOUNTER';
+                    }
                 }
             });
         }
 
-        // --- UI UPDATES ---
-        function updateUI() { document.getElementById('hp-bar').innerText = "|".repeat(Math.max(0, hp)); }
+        function updateUI() {
+            document.getElementById('hp-bar').innerText = "|".repeat(Math.max(0, hp));
+            document.getElementById('atk-mod').innerText = str + weaponBonus;
+            document.getElementById('weap-name').innerText = hasSword ? "IRON CLAYMORE" : "NONE";
+        }
         function updateLog(msg) { document.getElementById('log-content').innerHTML = `> ${msg}<br>` + document.getElementById('log-content').innerHTML; }
-        function updateCombatLog(msg) { document.getElementById('combat-log').innerText = `> ${msg}`; }
 
         // --- INPUTS ---
         window.addEventListener('keydown', (e) => {
-            if (gameState === 'RUNNING') {
-                if (e.code === 'ArrowUp') move(0, 1);
-                if (e.code === 'ArrowDown') move(0, -1);
-                if (e.code === 'ArrowLeft') move(-1, 0);
-                if (e.code === 'ArrowRight') move(1, 0);
-            } else if (gameState === 'ENCOUNTER') {
-                if (e.code === 'KeyA') resolveCombat('ATTACK');
-                if (e.code === 'KeyD') resolveCombat('DODGE');
-            }
+            if(e.code.includes('Up')) move(0,1); if(e.code.includes('Down')) move(0,-1);
+            if(e.code.includes('Left')) move(-1,0); if(e.code.includes('Right')) move(1,0);
         });
 
-        document.getElementById('btn-attack').addEventListener('click', () => resolveCombat('ATTACK'));
-        document.getElementById('btn-dodge').addEventListener('click', () => resolveCombat('DODGE'));
-
-        // Touch Navigation (Quadrant Tap)
-        window.addEventListener('touchstart', (e) => {
-            if (gameState !== 'RUNNING') return;
-            const x = e.touches[0].clientX / window.innerWidth;
-            const y = e.touches[0].clientY / window.innerHeight;
-            if (y < 0.3) move(0, 1); else if (y > 0.7) move(0, -1);
-            else if (x < 0.3) move(-1, 0); else if (x > 0.7) move(1, 0);
-        });
-
+        // --- LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-            worldGroup.position.lerp(targetWorldPos, 0.2);
+            worldGroup.position.lerp(targetWorldPos, 0.15);
             renderer.render(scene, camera);
         }
         animate();
